@@ -5,13 +5,13 @@ import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/ble_provision_service.dart';
 import '../../widgets/loading_indicator.dart';
-import '4_provisioning_loading_screen.dart'; // Import màn hình cuối
+import '4_provisioning_loading_screen.dart';
 
 class CreateMasterKeyScreen extends StatefulWidget {
   final BluetoothDevice connectedDevice;
-  final String deviceId; // Nhận từ màn hình trước
-  final String ssid;     // Nhận từ màn hình trước
-  final String password; // Nhận từ màn hình trước
+  final String deviceId;
+  final String ssid;
+  final String password;
 
   const CreateMasterKeyScreen({
     super.key,
@@ -31,36 +31,57 @@ class _CreateMasterKeyScreenState extends State<CreateMasterKeyScreen> {
   bool _isLoading = false;
   String? _errorMessage;
 
+  // --- HÀM ĐÃ SỬA LỖI ---
   Future<void> _submitMasterKey() async {
     if (!_formKey.currentState!.validate()) return;
     _formKey.currentState!.save();
     if (mounted) setState(() { _isLoading = true; _errorMessage = null; });
 
-    // Chuyển sang màn hình Loading cuối cùng để thực hiện 2 bước cuối
-    final result = await Navigator.of(context).pushReplacement<bool>(MaterialPageRoute( // Dùng Replacement
-      builder: (ctx) => ProvisioningLoadingScreen(
-        connectedDevice: widget.connectedDevice,
-        deviceId: widget.deviceId,
-        masterPassword: _masterPassword,
-        // ssid và password không cần gửi nữa vì đã gửi ở bước trước
-        // ssid: widget.ssid,
-        // password: widget.password,
-      ),
-    ));
+    try {
+      // Chuyển sang màn hình Loading cuối cùng (Bỏ <bool> khỏi pushReplacement)
+      final result = await Navigator.of(context).pushReplacement(MaterialPageRoute(
+        builder: (ctx) => ProvisioningLoadingScreen(
+          connectedDevice: widget.connectedDevice,
+          deviceId: widget.deviceId,
+          masterPassword: _masterPassword,
+          // ssid và password không cần truyền nữa nếu đã gửi ở bước trước
+        ),
+      ));
 
-    // Nếu màn hình Loading trả về true, đóng luôn màn hình này và trả về true
-    if (result == true && mounted && Navigator.canPop(context)) {
-      Navigator.of(context).pop(true);
-    } else if (result == false) {
-      // Nếu màn hình Loading trả về false (lỗi), hiển thị lỗi ở đây
+      // Kiểm tra kết quả trả về từ màn hình Loading
+      if (result == true) {
+        // Thành công: Đóng màn hình này và trả về true cho màn hình trước đó (ScanBleScreen)
+        if (mounted && Navigator.canPop(context)) {
+          Navigator.of(context).pop(true);
+        }
+      } else if (result == false) {
+        // Thất bại: Hiển thị lỗi trên màn hình này
+        if (mounted) {
+          setState(() {
+            _isLoading = false; // Tắt loading ở đây
+            _errorMessage = "Quá trình cài đặt thất bại. Vui lòng thử lại từ đầu.";
+          });
+        }
+      } else {
+        // Trường hợp khác (ví dụ: người dùng nhấn nút back từ màn hình loading)
+        if (mounted) {
+          setState(() { _isLoading = false; }); // Tắt loading
+          print("Provisioning was cancelled or returned unexpected result: $result");
+        }
+      }
+    } catch (e) {
+      // Xử lý lỗi nếu chính hàm pushReplacement có vấn đề (hiếm)
       if(mounted) {
         setState(() {
-          _isLoading = false; // Tắt loading ở đây
-          _errorMessage = "Quá trình cài đặt thất bại. Vui lòng thử lại từ đầu.";
+          _isLoading = false;
+          _errorMessage = "Lỗi điều hướng: ${e.toString()}";
         });
       }
     }
+    // Không cần finally ở đây vì setState đã được gọi trong các nhánh if/else
   }
+  // --- KẾT THÚC HÀM ĐÃ SỬA ---
+
 
   @override
   Widget build(BuildContext context) {
@@ -86,7 +107,7 @@ class _CreateMasterKeyScreenState extends State<CreateMasterKeyScreen> {
               TextFormField(
                 decoration: const InputDecoration(
                   labelText: 'Mật khẩu Gốc (ít nhất 6 ký tự)',
-                  prefixIcon: Icon(Icons.key),
+                  prefixIcon: Icon(Icons.key_outlined), // Sửa Icon
                 ),
                 obscureText: true,
                 validator: (value) {
@@ -109,11 +130,15 @@ class _CreateMasterKeyScreenState extends State<CreateMasterKeyScreen> {
                 onPressed: _submitMasterKey,
                 child: const Text('Hoàn tất Cài đặt'),
               ),
+              // Nút Hủy / Quay lại
               TextButton(
                   child: const Text("Hủy / Quay lại"),
-                  onPressed: () {
-                    // Không cần ngắt BLE vì màn hình trước sẽ xử lý
-                    Navigator.of(context).pop();
+                  // Chỉ cho phép hủy khi không đang loading
+                  onPressed: _isLoading ? null : () {
+                    // Không cần ngắt BLE ở đây, màn hình ScanBleScreen sẽ xử lý khi pop
+                    if(Navigator.canPop(context)) {
+                      Navigator.of(context).pop(false); // Trả về false để báo hủy
+                    }
                   }
               )
             ],

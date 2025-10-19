@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-// Import Screens (Chỉ cần import màn hình Login ban đầu)
-import 'screens/auth/login_screen.dart'; // Thay đổi import
-import 'screens/home/device_list_screen.dart'; // Import màn hình chính
+import 'screens/auth/login_screen.dart';
+import 'screens/home/device_list_screen.dart';
 
-// Import Services
 import 'services/auth_service.dart';
 import 'services/api_service.dart';
 
@@ -47,7 +45,7 @@ class MyApp extends StatelessWidget {
               ),
             ),
           ),
-          inputDecorationTheme: const InputDecorationTheme( // Thêm style cho TextField
+          inputDecorationTheme: const InputDecorationTheme(
             border: OutlineInputBorder(),
             focusedBorder: OutlineInputBorder(
               borderSide: BorderSide(color: Colors.deepPurple, width: 2.0),
@@ -62,7 +60,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// AuthWrapper không thay đổi
 class AuthWrapper extends StatelessWidget {
   const AuthWrapper({super.key});
 
@@ -79,9 +76,9 @@ class AuthWrapper extends StatelessWidget {
           );
         }
         if (authService.isAuthenticated) {
-          return const DeviceListScreen(); // Vào màn hình danh sách thiết bị
+          return const DeviceListScreen();
         } else {
-          return const LoginScreen(); // Bắt đầu bằng màn hình Login
+          return const LoginScreen();
         }
       },
     );

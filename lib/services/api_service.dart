@@ -6,7 +6,7 @@ class ApiService {
   // !!! THAY ĐỔI ĐỊA CHỈ IP HOẶC DOMAIN CỦA BACKEND CỦA BẠN !!!
   // Nếu test trên máy ảo Android, dùng 10.0.2.2
   // Nếu test trên máy thật cùng mạng Wi-Fi, dùng IP của máy tính (vd: 192.168.1.100)
-  final String _baseUrl = "http://10.0.2.2:8080/api"; // Mặc định cho máy ảo Android
+  final String _baseUrl = "https://rolldingdoor-36a1a3a76e60.herokuapp.com/api"; // Mặc định cho máy ảo Android
 
   final _storage = const FlutterSecureStorage();
 
