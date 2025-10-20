@@ -75,7 +75,7 @@ class _SetOfflinePasswordScreenState extends State<SetOfflinePasswordScreen> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 10),
-              const Text(
+               Text(
                 "Lưu ý: Thiết bị phải đang online (kết nối Wi-Fi) để nhận được mật khẩu mới này.",
                 textAlign: TextAlign.center, style: TextStyle(color: Colors.orange.shade800, fontSize: 13, fontWeight: FontWeight.w500),
               ),
