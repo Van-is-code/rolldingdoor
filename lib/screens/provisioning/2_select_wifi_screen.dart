@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '../../services/ble_provision_service.dart';
 import '../../widgets/loading_indicator.dart';
-import '3_create_master_key_screen.dart'; // Import màn hình tiếp theo
+import '3_create_master_key_screen.dart';
 
 class SelectWifiScreen extends StatefulWidget {
-  final BluetoothDevice connectedDevice; // Nhận device đã kết nối từ màn hình trước
+  final BluetoothDevice connectedDevice;
 
   const SelectWifiScreen({super.key, required this.connectedDevice});
 
@@ -16,10 +16,10 @@ class SelectWifiScreen extends StatefulWidget {
 class _SelectWifiScreenState extends State<SelectWifiScreen> {
   final BleProvisionService _bleService = BleProvisionService();
   final GlobalKey<FormState> _formKey = GlobalKey();
-  String _ssid = ''; // Tạm thời nhập tay
+  String _ssid = '';
   String _password = '';
-  String? _deviceId; // MAC Address đọc từ BLE
-  bool _isLoading = true; // Bắt đầu bằng loading để đọc deviceId
+  String? _deviceId;
+  bool _isLoading = true;
   String? _errorMessage;
 
   @override
@@ -28,11 +28,11 @@ class _SelectWifiScreenState extends State<SelectWifiScreen> {
     _discoverAndGetId();
   }
 
-  // Hàm đọc deviceId sau khi kết nối
   Future<void> _discoverAndGetId() async {
     if(mounted) setState(() => _isLoading = true);
     try {
-      _deviceId = await _bleService.discoverServicesAndGetDeviceId(widget.connectedDevice);
+      // *** SỬA TÊN HÀM: discoverServicesAndGetDeviceId -> discoverProvisionServices ***
+      _deviceId = await _bleService.discoverProvisionServices(widget.connectedDevice);
       if (_deviceId == null && mounted) {
         _handleError("Không đọc được Device ID (MAC) từ thiết bị.");
       }
@@ -50,20 +50,18 @@ class _SelectWifiScreenState extends State<SelectWifiScreen> {
     if (mounted) setState(() { _isLoading = true; _errorMessage = null; });
 
     try {
-      // Gửi thông tin Wi-Fi qua BLE
-      await _bleService.sendCredentials(_ssid.trim(), _password);
+      // *** SỬA TÊN HÀM: sendCredentials -> sendProvisionCredentials ***
+      await _bleService.sendProvisionCredentials(_ssid.trim(), _password);
 
-      // Nếu gửi thành công, chuyển sang màn hình tạo Master Key
       if (mounted) {
         Navigator.of(context).push(MaterialPageRoute(
           builder: (ctx) => CreateMasterKeyScreen(
-              connectedDevice: widget.connectedDevice, // Truyền tiếp device
-              deviceId: _deviceId!, // Truyền deviceId đã đọc được
-              ssid: _ssid.trim(), // Truyền ssid
-              password: _password // Truyền password
+              connectedDevice: widget.connectedDevice,
+              deviceId: _deviceId!,
+              ssid: _ssid.trim(),
+              password: _password
           ),
         )).then((result) {
-          // Nếu màn hình sau trả về true (thành công), đóng luôn màn hình này
           if (result == true && mounted && Navigator.canPop(context)) {
             Navigator.of(context).pop(true);
           }
@@ -89,7 +87,7 @@ class _SelectWifiScreenState extends State<SelectWifiScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Bước 2: Thông tin Wi-Fi')),
-      body: _isLoading && _deviceId == null // Chỉ loading khi chưa đọc được deviceId
+      body: _isLoading && _deviceId == null
           ? const LoadingIndicator()
           : SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
@@ -103,7 +101,6 @@ class _SelectWifiScreenState extends State<SelectWifiScreen> {
               const SizedBox(height: 25),
               const Text("Nhập thông tin mạng Wi-Fi bạn muốn thiết bị kết nối vào:", style: TextStyle(fontSize: 16)),
               const SizedBox(height: 20),
-              // TODO: Lấy danh sách Wi-Fi từ ESP32 thay vì nhập tay
               TextFormField(
                 decoration: const InputDecoration(
                   labelText: "Tên Wi-Fi (SSID)",
@@ -125,13 +122,9 @@ class _SelectWifiScreenState extends State<SelectWifiScreen> {
                 ),
                 obscureText: true,
                 validator: (value) {
-                  // Cho phép mật khẩu rỗng đối với mạng không bảo mật
-                  // if (value == null || value.isEmpty) {
-                  //   return 'Vui lòng nhập mật khẩu Wi-Fi';
-                  // }
-                  return null;
+                  return null; // Cho phép mật khẩu rỗng
                 },
-                onSaved: (value) => _password = value ?? '', // Lưu là chuỗi rỗng nếu null
+                onSaved: (value) => _password = value ?? '',
               ),
               const SizedBox(height: 30),
               if (_errorMessage != null)
@@ -139,7 +132,7 @@ class _SelectWifiScreenState extends State<SelectWifiScreen> {
                   padding: const EdgeInsets.only(bottom: 15.0),
                   child: Text(_errorMessage!, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center),
                 ),
-              _isLoading // Loading khi gửi Wi-Fi
+              _isLoading
                   ? const LoadingIndicator()
                   : ElevatedButton(
                 onPressed: _submitWifi,
@@ -148,7 +141,6 @@ class _SelectWifiScreenState extends State<SelectWifiScreen> {
               TextButton(
                   child: const Text("Hủy / Quay lại"),
                   onPressed: () {
-                    // Ngắt kết nối BLE trước khi pop
                     _bleService.disconnectFromDevice(widget.connectedDevice);
                     Navigator.of(context).pop();
                   }

@@ -10,16 +10,12 @@ class ProvisioningLoadingScreen extends StatefulWidget {
   final BluetoothDevice connectedDevice;
   final String deviceId;
   final String masterPassword;
-  // final String ssid; // Không cần nữa
-  // final String password; // Không cần nữa
 
   const ProvisioningLoadingScreen({
     super.key,
     required this.connectedDevice,
     required this.deviceId,
     required this.masterPassword,
-    // required this.ssid,
-    // required this.password,
   });
 
   @override
@@ -34,7 +30,6 @@ class _ProvisioningLoadingScreenState extends State<ProvisioningLoadingScreen> {
   @override
   void initState() {
     super.initState();
-    // Bắt đầu quá trình claim và gửi lệnh provision
     WidgetsBinding.instance.addPostFrameCallback((_) => _startFinalSteps());
   }
 
@@ -54,7 +49,8 @@ class _ProvisioningLoadingScreenState extends State<ProvisioningLoadingScreen> {
 
       // Bước 2: Gửi lệnh Provision qua BLE để ESP32 restart
       if (mounted) setState(() => _statusMessage = "Đang yêu cầu thiết bị kết nối Wi-Fi...");
-      await _bleService.sendProvisionCommand(widget.connectedDevice);
+      // *** SỬA TÊN HÀM: sendProvisionCommand -> sendProvisionStartCommand ***
+      await _bleService.sendProvisionStartCommand(widget.connectedDevice);
 
       // Bước 3: Hoàn tất, trả về true cho màn hình trước
       if (mounted && Navigator.canPop(context)) {
@@ -65,8 +61,9 @@ class _ProvisioningLoadingScreenState extends State<ProvisioningLoadingScreen> {
       _handleError("Lỗi trong quá trình cài đặt: ${e.toString().replaceFirst('Exception: ', '')}");
       // Thử ngắt kết nối BLE nếu còn
       try { await _bleService.disconnectFromDevice(widget.connectedDevice); } catch (_) {}
-      // Trả về false để màn hình trước biết là lỗi
-      await Future.delayed(const Duration(seconds: 3)); // Chờ 3s để user đọc lỗi
+
+      // Chờ 3s để user đọc lỗi rồi trả về false
+      await Future.delayed(const Duration(seconds: 3));
       if (mounted && Navigator.canPop(context)) {
         Navigator.of(context).pop(false);
       }
@@ -77,24 +74,21 @@ class _ProvisioningLoadingScreenState extends State<ProvisioningLoadingScreen> {
     if (mounted) {
       setState(() {
         _errorMessage = message;
-        _statusMessage = "Cài đặt thất bại!"; // Cập nhật status
+        _statusMessage = "Cài đặt thất bại!";
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Màn hình này chỉ hiển thị trạng thái loading
     return Scaffold(
-      // Không cần AppBar hoặc để AppBar đơn giản
-      // appBar: AppBar(title: Text("Đang xử lý...")),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(20.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              if (_errorMessage == null) // Chỉ hiển thị loading nếu không có lỗi
+              if (_errorMessage == null)
                 const LoadingIndicator(),
               const SizedBox(height: 30),
               Text(
@@ -115,7 +109,7 @@ class _ProvisioningLoadingScreenState extends State<ProvisioningLoadingScreen> {
                     textAlign: TextAlign.center,
                   ),
                 ),
-              // Không có nút bấm, màn hình sẽ tự đóng khi hoàn tất hoặc lỗi
+              // Không có nút bấm, màn hình sẽ tự đóng
             ],
           ),
         ),

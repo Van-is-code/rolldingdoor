@@ -1,6 +1,6 @@
 import 'dart:convert'; // Để dùng utf8
 import 'dart:async'; // Để dùng Stream, Future, timeout
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart'; // <<<--- LỖI THIẾU IMPORT
 
 class BleProvisionService {
   // --- UUIDs CHO CHẾ ĐỘ CÀI ĐẶT (Provisioning) ---
@@ -54,15 +54,12 @@ class BleProvisionService {
       print("Connected to ${device.platformName} (${device.remoteId})");
 
       // Yêu cầu ghép đôi (Pairing) nếu chưa
-      // Cần check quyền Bluetooth connect trên AndroidManifest.xml và Info.plist
       try {
         print("Attempting to pair with ${device.remoteId}...");
         await device.pair();
         print("Pairing successful or already paired.");
       } catch (e) {
         print("Pairing failed (might be already paired or OS popup handled): $e");
-        // Không ném lỗi ở đây, vì nhiều HĐH tự xử lý pairing khi kết nối
-        // Chỉ ném lỗi nếu kết nối thất bại hoàn toàn
       }
 
       return device;
