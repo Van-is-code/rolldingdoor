@@ -24,45 +24,56 @@ class DeviceListScreen extends StatefulWidget {
 }
 
 class _DeviceListScreenState extends State<DeviceListScreen> {
-  // Không cần ApiService ở đây vì đã dùng Provider
-  // final ApiService _apiService = ApiService();
   late Future<List<Device>> _devicesFuture;
 
   @override
   void initState() {
     super.initState();
+    print('>>> DeviceListScreen initState'); // <--- THÊM LOG
     _devicesFuture = _loadDevices();
   }
 
   // Lấy danh sách thiết bị từ API
   Future<List<Device>> _loadDevices() async {
+    print('>>> Bắt đầu _loadDevices'); // <--- THÊM LOG
     // Dùng Provider.of để lấy instance
-    final apiService = Provider.of<ApiService>(context, listen: false);
-    final token = Provider.of<AuthService>(context, listen: false).token;
+    // Sử dụng context.read an toàn hơn trong initState/future callbacks
+    final apiService = context.read<ApiService>();
+    final authService = context.read<AuthService>();
+    final token = authService.token;
 
     if (token == null) {
+      print('>>> _loadDevices: Không tìm thấy token, đang đăng xuất'); // <--- THÊM LOG
       // Đăng xuất nếu không có token
-      await Provider.of<AuthService>(context, listen: false).logout();
+      // Không cần await nếu không cần đợi kết quả logout hoàn thành ngay lập tức
+      authService.logout();
       // Ném lỗi để FutureBuilder hiển thị
       throw Exception("Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.");
     }
     try {
+      print('>>> Chuẩn bị gọi apiService.getMyDevices()'); // <--- THÊM LOG
       final List<dynamic> rawData = await apiService.getMyDevices();
+      print('>>> Gọi getMyDevices() thành công, data: $rawData'); // <--- THÊM LOG
       return rawData.map((data) => Device.fromJson(data as Map<String, dynamic>)).toList();
     } catch (e) {
-      print("Error loading devices: $e");
+      print('>>> Lỗi trong _loadDevices: $e'); // <--- THÊM LOG lỗi
       // Xử lý lỗi token hết hạn (ví dụ)
       if (e.toString().contains('401') || e.toString().contains('403')) {
-        await Provider.of<AuthService>(context, listen: false).logout();
+        print('>>> _loadDevices: Lỗi 401/403, đang đăng xuất'); // <--- THÊM LOG
+        // Không cần await
+        authService.logout();
         throw Exception("Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.");
       }
       rethrow; // Ném lại các lỗi khác
+    } finally {
+      print('>>> Kết thúc _loadDevices'); // <--- THÊM LOG
     }
   }
 
   // Refresh danh sách
   Future<void> _refreshDevices() async {
     if (mounted) {
+      print('>>> Bắt đầu _refreshDevices'); // <--- THÊM LOG
       setState(() {
         _devicesFuture = _loadDevices();
       });
@@ -122,13 +133,15 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
       ),
     );
     if (confirm == true && mounted) {
-      await Provider.of<AuthService>(context, listen: false).logout();
+      // Dùng context.read vì đang ở trong hàm async
+      await context.read<AuthService>().logout();
       // AuthWrapper sẽ tự chuyển về màn hình Login
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    print('>>> DeviceListScreen build'); // <--- THÊM LOG
     return Scaffold(
       appBar: AppBar(
         title: const Text("Thiết bị Cửa Cuốn"),
@@ -153,10 +166,13 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
       body: FutureBuilder<List<Device>>(
         future: _devicesFuture,
         builder: (ctx, snapshot) {
+          print('>>> DeviceList FutureBuilder state: ${snapshot.connectionState}'); // <--- THÊM LOG
           if (snapshot.connectionState == ConnectionState.waiting) {
+            print('>>> DeviceList FutureBuilder đang chờ...'); // <--- THÊM LOG
             return const LoadingIndicator();
           }
           if (snapshot.hasError) {
+            print('>>> DeviceList FutureBuilder có lỗi: ${snapshot.error}'); // <--- THÊM LOG lỗi
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -179,6 +195,7 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
             );
           }
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            print('>>> DeviceList FutureBuilder: Không có dữ liệu hoặc danh sách rỗng'); // <--- THÊM LOG
             return RefreshIndicator(
               onRefresh: _refreshDevices,
               child: ListView( // Dùng ListView để có hiệu ứng kéo
@@ -197,6 +214,7 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
             );
           }
 
+          print('>>> DeviceList FutureBuilder: Có dữ liệu, đang hiển thị ListView'); // <--- THÊM LOG
           final devices = snapshot.data!;
           return RefreshIndicator(
             onRefresh: _refreshDevices,

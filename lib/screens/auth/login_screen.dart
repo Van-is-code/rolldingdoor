@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/loading_indicator.dart';
 import 'register_screen.dart'; // Import màn hình đăng ký
+import '../join/offline_scan_screen.dart'; // Import màn hình quét offline
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -20,12 +21,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     _formKey.currentState!.save();
-    if (mounted) {
-      setState(() {
-        _isLoading = true;
-        _errorMessage = null;
-      });
-    }
+    if (mounted) setState(() { _isLoading = true; _errorMessage = null; });
 
     try {
       await Provider.of<AuthService>(context, listen: false).login(
@@ -36,22 +32,27 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (error) {
       if (mounted) {
         setState(() {
-          _errorMessage = error.toString().replaceFirst('Exception: ', '');
+          _errorMessage = error.toString().replaceFirst(RegExp(r'^\d+:\s*'), ''); // Bỏ mã lỗi
         });
       }
     } finally {
-      if (mounted) {
-        setState(() { _isLoading = false; });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   void _navigateToRegister() {
-    Navigator.of(context).pushReplacement( // Dùng pushReplacement để không quay lại màn login
-      MaterialPageRoute(builder: (ctx) => const RegisterScreen()),
-    );
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (ctx) => const RegisterScreen(),
+    ));
   }
 
+  // --- HÀM MỚI: Điều hướng đến màn hình BLE Offline ---
+  void _navigateToOfflineControl() {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (ctx) => const OfflineScanScreen(), // Màn hình quét BLE offline
+    ));
+  }
+  // ---------------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -125,9 +126,20 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 10),
                   TextButton(
                     onPressed: _navigateToRegister,
-                    child: Text(
-                      'Chưa có tài khoản? Đăng ký ngay',
-                      style: TextStyle(color: Theme.of(context).colorScheme.primary),
+                    child: const Text('Chưa có tài khoản? Đăng ký ngay'),
+                  ),
+                  const SizedBox(height: 15),
+                  const Divider(),
+                  const SizedBox(height: 15),
+                  // --- NÚT MỚI: ĐIỀU KHIỂN OFFLINE ---
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.bluetooth_searching),
+                    label: const Text('Điều khiển Offline (Bluetooth)'),
+                    onPressed: _navigateToOfflineControl,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.grey.shade700,
+                      side: BorderSide(color: Colors.grey.shade400),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                     ),
                   ),
                 ],

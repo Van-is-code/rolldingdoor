@@ -3,37 +3,40 @@ import 'api_service.dart'; // Import ApiService
 
 class AuthService with ChangeNotifier {
   String? _token;
-  // Bỏ final ApiService _apiService = ApiService();
+  final ApiService _apiService; // Nhận ApiService qua constructor
 
-  // Thêm final và constructor
-  final ApiService _apiService;
-  AuthService(this._apiService); // Constructor nhận ApiService
+  // *** SỬA LỖI: Thêm constructor ***
+  AuthService(this._apiService);
 
   bool get isAuthenticated => _token != null;
   String? get token => _token;
 
+  // Thử tự động login bằng token đã lưu
   Future<bool> tryAutoLogin() async {
     _token = await _apiService.getTokenFromStorage();
     if (_token == null) {
       return false;
     }
-    // TODO: Validate token expiry
+    // TODO: Thêm logic kiểm tra token hết hạn (ví dụ: dùng thư viện jwt_decoder)
+    // Nếu hết hạn thì gọi logout() và return false
     notifyListeners();
     return true;
   }
 
+  // Gọi API login
   Future<void> login(String username, String password) async {
     try {
       _token = await _apiService.login(username, password);
-      notifyListeners();
+      notifyListeners(); // Thông báo UI cập nhật
     } catch (e) {
-      _token = null; // Reset token on error
+      _token = null; // Đảm bảo token là null nếu login lỗi
       notifyListeners();
-      print("Login error: $e");
-      rethrow;
+      print("Login error: $e"); // In lỗi ra console
+      rethrow; // Ném lại lỗi để UI xử lý và hiển thị
     }
   }
 
+  // Gọi API register
   Future<void> register(String username, String password) async {
     try {
       await _apiService.register(username, password);
@@ -43,9 +46,10 @@ class AuthService with ChangeNotifier {
     }
   }
 
+  // Logout
   Future<void> logout() async {
     _token = null;
     await _apiService.logout();
-    notifyListeners();
+    notifyListeners(); // Thông báo UI cập nhật
   }
 }
