@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io'; // Thêm import Platform
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '../../services/ble_provision_service.dart';
@@ -35,6 +36,7 @@ class _ScanBleScreenState extends State<ScanBleScreen> {
     super.dispose();
   }
 
+  // *** HÀM _startScan ĐÃ ĐƯỢC SỬA LẠI HOÀN TOÀN ***
   Future<void> _startScan() async {
     if (mounted) {
       setState(() {
@@ -46,12 +48,35 @@ class _ScanBleScreenState extends State<ScanBleScreen> {
     }
 
     try {
-      await _bleService.startScan(timeoutSeconds: 7); // Quét lâu hơn chút
+      // 1. Kiểm tra Bluetooth có bật không
+      // (Phiên bản flutter_blue_plus mới dùng 'adapterState')
+      var adapterState = await FlutterBluePlus.adapterState.first;
+      if (adapterState != BluetoothAdapterState.on) {
+        throw Exception("Vui lòng bật Bluetooth trên điện thoại của bạn.");
+      }
+
+      // 2. (Quan trọng) Kiểm tra Vị trí (GPS)
+      // *** SỬA LỖI: 'isLocationOn' đã bị xóa ***
+      // Chúng ta sẽ dựa vào việc quét, nếu nó ném lỗi quyền nghĩa là GPS/Quyền đang tắt.
+      if (Platform.isAndroid) {
+        // Trên Android, thư viện không tự check được GPS nữa,
+        // chúng ta phải yêu cầu quét. Nếu quyền thiếu, nó sẽ ném lỗi.
+        // Bạn cũng nên BẬT GPS/VỊ TRÍ thủ công trên điện thoại.
+        print("Đang trên Android, hãy đảm bảo GPS/Vị trí đã được bật.");
+      }
+
+      // 3. Bắt đầu quét VỚI LỌC SERVICE UUID
+      // (Tối ưu code, chỉ tìm thiết bị có service cài đặt)
+      await _bleService.startScan(
+          timeoutSeconds: 7,
+          withServices: [_bleService.provServiceUuid] // Lọc theo service cài đặt
+      );
+
       _scanSubscription?.cancel(); // Hủy sub cũ nếu có
       _scanSubscription = _bleService.scanResults.listen((results) {
         if(mounted) {
           setState(() {
-            // Lọc và hiển thị các thiết bị có tên
+            // Lọc và hiển thị các thiết bị có tên (thường là 'CuaCuon_Setup')
             _scanResults = results.where((r) => r.device.platformName.isNotEmpty).toList();
           });
         }
@@ -59,32 +84,43 @@ class _ScanBleScreenState extends State<ScanBleScreen> {
         _handleError("Lỗi stream kết quả quét: ${e.toString()}");
       });
 
-      // Chờ quét xong (hoặc timeout)
+      // Chờ quét xong (ho̟ặc timeout)
       await _bleService.isScanning.where((s) => s == false).first;
 
       // Kiểm tra nếu không tìm thấy thiết bị mong muốn
-      if (mounted && _scanResults.isEmpty) {
-        _handleError("Không tìm thấy thiết bị nào.\nVui lòng đảm bảo thiết bị đã bật chế độ cài đặt (đèn nháy?) và ở gần.");
+      if (mounted && _scanResults.isEmpty && _errorMessage == null) { // Chỉ báo lỗi nếu chưa có lỗi nào khác
+        _handleError("Không tìm thấy thiết bị 'CuaCuon_Setup'.\n1. Đảm bảo bạn đã BẬT GPS/Vị trí.\n2. Đảm bảo ESP32 đang ở chế độ cài đặt.\n3. Đảm bảo bạn đã cấp quyền Bluetooth & Vị trí cho ứng dụng.");
       }
 
     } catch (e) {
-      _handleError("Lỗi khi bắt đầu quét: ${e.toString()}");
+      String errorMsg = e.toString();
+      // Bắt lỗi cụ thể khi thiếu quyền hoặc GPS
+      if (errorMsg.contains('ACCESS_FINE_LOCATION')) {
+        _handleError("Lỗi: Ứng dụng thiếu quyền Vị trí (Location). Vui lòng cấp quyền trong Cài đặt.");
+      } else if (errorMsg.contains('BLUETOOTH_SCAN')) {
+        _handleError("Lỗi: Ứng dụng thiếu quyền Quét Bluetooth. Vui lòng cấp quyền trong Cài đặt.");
+      } else {
+        _handleError("Lỗi khi bắt đầu quét: ${errorMsg.replaceFirst('Exception: ', '')}");
+      }
     } finally {
       if(mounted) {
         setState(() { _isScanning = false; });
       }
     }
   }
+  // --- KẾT THÚC HÀM _startScan ---
 
   Future<void> _connectAndProceed(BluetoothDevice device) async {
     if(mounted) setState(() => _connectingDevice = device); // Hiển thị loading cho item này
 
     try {
+      // Dừng quét trước khi kết nối
+      await _bleService.stopScan();
+
       // Kết nối BLE
       final connectedDevice = await _bleService.connectToDevice(device);
 
       // Nếu kết nối thành công, chuyển sang màn hình tiếp theo
-      // Truyền device đã kết nối sang
       if (mounted) {
         final result = await Navigator.of(context).push<bool>(MaterialPageRoute(
           builder: (ctx) => SelectWifiScreen(connectedDevice: connectedDevice),
@@ -92,14 +128,16 @@ class _ScanBleScreenState extends State<ScanBleScreen> {
         // Nếu màn hình sau trả về true (thành công), đóng luôn màn hình này
         if (result == true && mounted && Navigator.canPop(context)) {
           Navigator.of(context).pop(true);
+        } else {
+          // Nếu quay lại (result = false hoặc null), ngắt kết nối BLE
+          _bleService.disconnectFromDevice(connectedDevice);
+          if(mounted) setState(() => _connectingDevice = null);
         }
       }
 
     } catch (e) {
       _handleError("Kết nối thất bại: ${e.toString().replaceFirst('Exception: ', '')}");
-    } finally {
-      // Dù thành công hay thất bại, bỏ trạng thái loading của item
-      if(mounted) setState(() => _connectingDevice = null);
+      if(mounted) setState(() => _connectingDevice = null); // Đảm bảo reset state
     }
   }
 
@@ -120,7 +158,13 @@ class _ScanBleScreenState extends State<ScanBleScreen> {
         title: const Text('Bước 1: Tìm thiết bị'),
         actions: [
           // Nút quét lại
-          if (!_isScanning)
+          if (_isScanning)
+          // Hiển thị vòng quay loading nhỏ trên AppBar
+            const Padding(
+              padding: EdgeInsets.only(right: 15.0),
+              child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3)),
+            )
+          else
             IconButton(
               icon: const Icon(Icons.refresh),
               tooltip: "Quét lại",
@@ -143,9 +187,18 @@ class _ScanBleScreenState extends State<ScanBleScreen> {
                 ],
               )
             else if (_errorMessage != null)
-              Text(_errorMessage!, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center)
+            // Hiển thị lỗi rõ ràng hơn
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade200)
+                ),
+                child: Text(_errorMessage!, style: TextStyle(color: Colors.red.shade900), textAlign: TextAlign.center),
+              )
             else if (_scanResults.isEmpty)
-                const Text("Không tìm thấy thiết bị nào.", textAlign: TextAlign.center),
+                const Text("Không tìm thấy thiết bị nào. Nhấn Refresh để quét lại.", textAlign: TextAlign.center),
 
             const SizedBox(height: 20),
             const Divider(),
@@ -157,19 +210,23 @@ class _ScanBleScreenState extends State<ScanBleScreen> {
                 itemBuilder: (ctx, index) {
                   final result = _scanResults[index];
                   final isConnecting = _connectingDevice?.remoteId == result.device.remoteId;
+
+                  // Chỉ hiển thị thiết bị có tên "CuaCuon_Setup"
+                  if (result.device.platformName != "CuaCuon_Setup") {
+                    return const SizedBox.shrink(); // Ẩn các thiết bị khác
+                  }
+
                   return Card(
                     child: ListTile(
-                      leading: isConnecting ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 3)) : const Icon(Icons.bluetooth_searching),
-                      title: Text(result.device.platformName),
-                      subtitle: Text(result.device.remoteId.toString()),
-                      // Chỉ hiển thị nút Kết nối cho thiết bị 'CuaCuon_Setup'
-                      trailing: result.device.platformName == "CuaCuon_Setup"
-                          ? ElevatedButton(
-                        child: const Text('Kết nối'),
-                        // Vô hiệu hóa nếu đang quét hoặc đang kết nối thiết bị khác
-                        onPressed: (_isScanning || _connectingDevice != null) ? null : () => _connectAndProceed(result.device),
-                      )
-                          : null, // Không hiển thị nút cho thiết bị khác
+                        leading: isConnecting ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 3)) : const Icon(Icons.bluetooth_searching),
+                        title: Text(result.device.platformName),
+                        subtitle: Text(result.device.remoteId.toString()),
+                        // Chỉ hiển thị nút Kết nối cho thiết bị 'CuaCuon_Setup'
+                        trailing: ElevatedButton(
+                          child: const Text('Kết nối'),
+                          // Vô hiệu hóa nếu đang quét hoặc đang kết nối thiết bị khác
+                          onPressed: (_isScanning || _connectingDevice != null) ? null : () => _connectAndProceed(result.device),
+                        )
                     ),
                   );
                 },

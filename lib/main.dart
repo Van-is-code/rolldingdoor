@@ -27,7 +27,7 @@ class MyApp extends StatelessWidget {
         Provider<ApiService>(create: (_) => ApiService()),
         // AuthService cần ChangeNotifier để cập nhật UI khi login/logout
         ChangeNotifierProvider<AuthService>(
-          // *** SỬA LỖI: Truyền ApiService vào AuthService qua constructor ***
+          // Truyền ApiService vào AuthService qua constructor
           create: (ctx) => AuthService(Provider.of<ApiService>(ctx, listen: false)),
         ),
       ],
@@ -35,74 +35,93 @@ class MyApp extends StatelessWidget {
         title: 'Cửa cuốn thông minh',
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-          useMaterial3: true, // Bật Material 3 UI
-          appBarTheme: const AppBarTheme( // Thống nhất AppBar style
+          useMaterial3: true,
+          appBarTheme: const AppBarTheme(
             backgroundColor: Colors.deepPurple,
-            foregroundColor: Colors.white, // Màu chữ và icon trên AppBar
+            foregroundColor: Colors.white,
             elevation: 4,
-            centerTitle: true, // Căn giữa tiêu đề AppBar (tùy chọn)
+            centerTitle: true,
           ),
-          elevatedButtonTheme: ElevatedButtonThemeData( // Thống nhất Button style
+          elevatedButtonTheme: ElevatedButtonThemeData(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.deepPurple, // Màu nền nút
-              foregroundColor: Colors.white, // Màu chữ nút
+              backgroundColor: Colors.deepPurple,
+              foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8), // Bo góc nút
+                borderRadius: BorderRadius.circular(8),
               ),
             ),
           ),
-          inputDecorationTheme: InputDecorationTheme( // Thêm style cho TextField
-            border: OutlineInputBorder( // Viền mặc định
-              borderRadius: BorderRadius.circular(8),
+          inputDecorationTheme: const InputDecorationTheme(
+            border: OutlineInputBorder(),
+            focusedBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: Colors.deepPurple, width: 2.0),
             ),
-            focusedBorder: OutlineInputBorder( // Viền khi focus
-              borderSide: const BorderSide(color: Colors.deepPurple, width: 2.0),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            prefixIconColor: Colors.deepPurple.shade300, // Màu icon trong TextField
-            floatingLabelStyle: const TextStyle(color: Colors.deepPurple), // Màu label khi focus
+            prefixIconColor: Colors.deepPurple,
           ),
-          textButtonTheme: TextButtonThemeData( // Style cho TextButton
+          textButtonTheme: TextButtonThemeData(
             style: TextButton.styleFrom(
-              foregroundColor: Colors.deepPurple, // Màu chữ
+              foregroundColor: Colors.deepPurple,
             ),
           ),
-          cardTheme: CardTheme( // Style cho Card (dùng trong DeviceList)
+          cardTheme: CardTheme(
             elevation: 3,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           ),
         ),
-        home: const AuthWrapper(), // Màn hình quyết định đăng nhập hay vào home
+        home: const AuthWrapper(), // Bắt đầu với AuthWrapper
         debugShowCheckedModeBanner: false, // Tắt banner debug
       ),
     );
   }
 }
 
-// Widget kiểm tra trạng thái đăng nhập ban đầu
-class AuthWrapper extends StatelessWidget {
+// --- AuthWrapper (Đã sửa thành StatefulWidget) ---
+// Giúp tối ưu, chỉ chạy tryAutoLogin() 1 LẦN DUY NHẤT khi app khởi động
+class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final authService = Provider.of<AuthService>(context);
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
 
+class _AuthWrapperState extends State<AuthWrapper> {
+  late Future<bool> _tryAutoLoginFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    // Gọi tryAutoLogin() MỘT LẦN trong initState
+    _tryAutoLoginFuture = Provider.of<AuthService>(context, listen: false).tryAutoLogin();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Dùng FutureBuilder để xử lý việc "chờ" lần đầu khởi động
     return FutureBuilder(
-      future: authService.tryAutoLogin(),
+      future: _tryAutoLoginFuture, // Sử dụng future đã lưu
       builder: (ctx, authSnapshot) {
+        // Nếu vẫn đang chờ check token lần đầu, hiển thị màn hình chờ
         if (authSnapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
+            body: Center(child: CircularProgressIndicator(key: ValueKey('initial_load'))),
           );
         }
-        if (authService.isAuthenticated) {
-          return const DeviceListScreen(); // Vào màn hình danh sách thiết bị
-        } else {
-          return const LoginScreen(); // Bắt đầu bằng màn hình Login
-        }
+
+        // Đã check xong, dùng Consumer để "lắng nghe" thay đổi
+        // (như khi nhấn login/logout)
+        return Consumer<AuthService>(
+          builder: (ctx, authService, _) {
+            // Dựa vào trạng thái isAuthenticated để quyết định màn hình
+            if (authService.isAuthenticated) {
+              return const DeviceListScreen();
+            } else {
+              return const LoginScreen();
+            }
+          },
+        );
       },
     );
   }
